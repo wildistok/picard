@@ -131,11 +131,11 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
 
         final ProgressLogger progress = new ProgressLogger(log);
         //my code
-        List<SAMRecord> arr = new ArrayList<SAMRecord>();
+       // List<SAMRecord> arr = new ArrayList<SAMRecord>();
         ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
         for (final SAMRecord rec : in) {
-            arr.add(rec);
+         //   arr.add(rec);
             final ReferenceSequence ref;
             if (walker == null || rec.getReferenceIndex() == SAMRecord.NO_ALIGNMENT_REFERENCE_INDEX) {
                 ref = null;
@@ -143,16 +143,8 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                 ref = walker.get(rec.getReferenceIndex());
             }
 
-
-
             for (final SinglePassSamProgram program : programs) {
-                if (arr.get(0)!= rec) System.out.print("ERROR");
-                exec.submit(() -> {
-
-                        program.acceptRead(arr.get(0), ref);
-
-                });
-                arr.clear();
+                exec.submit(() -> program.acceptRead(rec, ref));
             }
 
             progress.record(rec);
