@@ -42,8 +42,13 @@ import picard.cmdline.Option;
 import picard.cmdline.StandardOptionDefinitions;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Super class that is designed to provide some consistent structure between subclasses that
@@ -125,8 +130,11 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
 
 
         final ProgressLogger progress = new ProgressLogger(log);
-
+        //my code
+        List<SAMRecord> arr = new ArrayList<SAMRecord>();
+        ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
         for (final SAMRecord rec : in) {
+            arr.add(rec);
             final ReferenceSequence ref;
             if (walker == null || rec.getReferenceIndex() == SAMRecord.NO_ALIGNMENT_REFERENCE_INDEX) {
                 ref = null;
@@ -135,7 +143,12 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
             }
 
             for (final SinglePassSamProgram program : programs) {
-                program.acceptRead(rec, ref);
+                exec.submit(() -> {
+                    for (int i = 0; i < 10000; i++) {
+                        program.acceptRead(arr.get(i), ref);
+                    }
+                });
+                arr.clear();
             }
 
             progress.record(rec);
@@ -150,7 +163,13 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                 break;
             }
         }
-
+        exec.shutdown();
+        try {
+            exec.awaitTermination(1, TimeUnit.DAYS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        //end
         CloserUtil.close(in);
 
         for (final SinglePassSamProgram program : programs) {
