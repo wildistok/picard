@@ -133,6 +133,7 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
         //my code
         List<SAMRecord> arr = new ArrayList<SAMRecord>();
         ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
         for (final SAMRecord rec : in) {
             arr.add(rec);
             final ReferenceSequence ref;
@@ -142,11 +143,14 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                 ref = walker.get(rec.getReferenceIndex());
             }
 
+
+
             for (final SinglePassSamProgram program : programs) {
+                if (arr.get(0)!= rec) System.out.print("ERROR");
                 exec.submit(() -> {
-                    for (int i = 0; i < 10000; i++) {
-                        program.acceptRead(arr.get(i), ref);
-                    }
+
+                        program.acceptRead(arr.get(0), ref);
+
                 });
                 arr.clear();
             }
