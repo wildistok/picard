@@ -46,9 +46,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * Super class that is designed to provide some consistent structure between subclasses that
@@ -130,12 +128,14 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
 
 
         final ProgressLogger progress = new ProgressLogger(log);
+
         //my code
-       // List<SAMRecord> arr = new ArrayList<SAMRecord>();
+        List<SAMRecord> arr = new ArrayList<SAMRecord>();
         ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
         for (final SAMRecord rec : in) {
-         //   arr.add(rec);
+            arr.add(rec);
+
             final ReferenceSequence ref;
             if (walker == null || rec.getReferenceIndex() == SAMRecord.NO_ALIGNMENT_REFERENCE_INDEX) {
                 ref = null;
@@ -143,9 +143,26 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                 ref = walker.get(rec.getReferenceIndex());
             }
 
-            for (final SinglePassSamProgram program : programs) {
-                exec.submit(() -> program.acceptRead(rec, ref));
+            if (arr.size() == 100000) {
+                List<Future> futures = new ArrayList<>(programs.size());
+                for (final SinglePassSamProgram program : programs) {
+                    Future future = exec.submit(() -> {
+                        for (int i = 0; i < arr.size(); i++)
+                            program.acceptRead(arr.get(i), ref);
+                    });
+                    futures.add(future);
+                }
+
+                for (Future f : futures) {
+                    try {
+                        f.get();
+                    } catch (InterruptedException | ExecutionException e) {
+                        e.printStackTrace();
+                    }
+                }
+                arr.clear();
             }
+
 
             progress.record(rec);
 
@@ -159,6 +176,7 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                 break;
             }
         }
+
         exec.shutdown();
         try {
             exec.awaitTermination(1, TimeUnit.DAYS);
