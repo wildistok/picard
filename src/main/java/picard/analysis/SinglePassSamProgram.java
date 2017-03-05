@@ -42,8 +42,11 @@ import picard.cmdline.Option;
 import picard.cmdline.StandardOptionDefinitions;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
+import java.util.concurrent.*;
 
 /**
  * Super class that is designed to provide some consistent structure between subclasses that
@@ -126,6 +129,15 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
 
         final ProgressLogger progress = new ProgressLogger(log);
 
+        //Declaration lists for storage rec and ref
+        List<SAMRecord> list_rec = new ArrayList<SAMRecord>();
+        List<ReferenceSequence> list_ref = new ArrayList<ReferenceSequence>();
+        //Data packet size
+        int list_size = 99999;
+        //Create object for multithreaded operation for processor model
+        ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
+
         for (final SAMRecord rec : in) {
             final ReferenceSequence ref;
             if (walker == null || rec.getReferenceIndex() == SAMRecord.NO_ALIGNMENT_REFERENCE_INDEX) {
@@ -134,9 +146,11 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                 ref = walker.get(rec.getReferenceIndex());
             }
 
-            for (final SinglePassSamProgram program : programs) {
-                program.acceptRead(rec, ref);
-            }
+            //Adding rec and ref to the lists
+            list_ref.add(ref);
+            list_rec.add(rec);
+            //Running method with multithreaded mode with accumulation of data packet
+            myMultiThreads(list_size, list_rec,list_ref,exec,programs);
 
             progress.record(rec);
 
@@ -151,6 +165,16 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
             }
         }
 
+        //Running method with multithreaded mode with the remaining data in the list
+        myMultiThreads(0, list_rec, list_ref, exec, programs);
+
+        exec.shutdown();
+        try {
+            exec.awaitTermination(1, TimeUnit.DAYS);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        //end
         CloserUtil.close(in);
 
         for (final SinglePassSamProgram program : programs) {
@@ -174,4 +198,31 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
     /** Should be implemented by subclasses to do one-time finalization work. */
     protected abstract void finish();
 
+
+
+
+    private static void myMultiThreads (int size, List<SAMRecord> rec, List<ReferenceSequence> ref, ExecutorService executor, Collection<SinglePassSamProgram> programs) {
+        if (rec.size() > size) {
+            List<Future> futures = new ArrayList<>(programs.size());
+            //Running programs in multi-threaded mode
+            for (final SinglePassSamProgram program : programs) {
+                Future future = executor.submit(() -> {
+                    for (int i = 0; i < rec.size(); i++)
+                        program.acceptRead(rec.get(i), ref.get(i));
+               });
+                futures.add(future);
+            }
+            //Waiting for the completion of the flow
+            for (Future f : futures) {
+                try {
+                    f.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
+            //Clear lists
+            rec.clear();
+            ref.clear();
+        }
+    }
 }
