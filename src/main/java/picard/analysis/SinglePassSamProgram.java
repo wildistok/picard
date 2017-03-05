@@ -129,10 +129,14 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
 
         final ProgressLogger progress = new ProgressLogger(log);
 
-        //my code
+        //Declaration lists for storage rec and ref
         List<SAMRecord> list_rec = new ArrayList<SAMRecord>();
         List<ReferenceSequence> list_ref = new ArrayList<ReferenceSequence>();
+        //Data packet size
+        int list_size = 99999;
+        //Create object for multithreaded operation for processor model
         ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+
 
         for (final SAMRecord rec : in) {
             final ReferenceSequence ref;
@@ -141,30 +145,12 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
             } else {
                 ref = walker.get(rec.getReferenceIndex());
             }
-            int list_size = 100000;
+
+            //Adding rec and ref to the lists
             list_ref.add(ref);
             list_rec.add(rec);
-
-            if (list_rec.size() == list_size) {
-                List<Future> futures = new ArrayList<>(programs.size());
-                for (final SinglePassSamProgram program : programs) {
-                    Future future = exec.submit(() -> {
-                        for (int i = 0; i < list_rec.size(); i++)
-                            program.acceptRead(list_rec.get(i), list_ref.get(i));
-                    });
-                    futures.add(future);
-                }
-
-                for (Future f : futures) {
-                    try {
-                        f.get();
-                    } catch (InterruptedException | ExecutionException e) {
-                        e.printStackTrace();
-                    }
-                }
-                list_rec.clear();
-                list_ref.clear();
-            }
+            //Running method with multithreaded mode with accumulation of data packet
+            myMultiThreads(list_size, list_rec,list_ref,exec,programs);
 
             progress.record(rec);
 
@@ -179,26 +165,8 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
             }
         }
 
-        if (list_rec.size() > 0) {
-            List<Future> futures = new ArrayList<>(programs.size());
-            for (final SinglePassSamProgram program : programs) {
-                Future future = exec.submit(() -> {
-                    for (int i = 0; i < list_rec.size(); i++)
-                        program.acceptRead(list_rec.get(i), list_ref.get(i));
-                });
-                futures.add(future);
-            }
-
-            for (Future f : futures) {
-                try {
-                    f.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    e.printStackTrace();
-                }
-            }
-            list_rec.clear();
-            list_ref.clear();
-        }
+        //Running method with multithreaded mode with the remaining data in the list
+        myMultiThreads(0, list_rec, list_ref, exec, programs);
 
         exec.shutdown();
         try {
@@ -230,4 +198,31 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
     /** Should be implemented by subclasses to do one-time finalization work. */
     protected abstract void finish();
 
+
+
+
+    private static void myMultiThreads (int size, List<SAMRecord> rec, List<ReferenceSequence> ref, ExecutorService executor, Collection<SinglePassSamProgram> programs) {
+        if (rec.size() > size) {
+            List<Future> futures = new ArrayList<>(programs.size());
+            //Running programs in multi-threaded mode
+            for (final SinglePassSamProgram program : programs) {
+                Future future = executor.submit(() -> {
+                    for (int i = 0; i < rec.size(); i++)
+                        program.acceptRead(rec.get(i), ref.get(i));
+               });
+                futures.add(future);
+            }
+            //Waiting for the completion of the flow
+            for (Future f : futures) {
+                try {
+                    f.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
+            //Clear lists
+            rec.clear();
+            ref.clear();
+        }
+    }
 }
