@@ -130,25 +130,27 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
         final ProgressLogger progress = new ProgressLogger(log);
 
         //my code
-        List<SAMRecord> arr = new ArrayList<SAMRecord>();
+        List<SAMRecord> list_rec = new ArrayList<SAMRecord>();
+        List<ReferenceSequence> list_ref = new ArrayList<ReferenceSequence>();
         ExecutorService exec = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
         for (final SAMRecord rec : in) {
-            arr.add(rec);
-
             final ReferenceSequence ref;
             if (walker == null || rec.getReferenceIndex() == SAMRecord.NO_ALIGNMENT_REFERENCE_INDEX) {
                 ref = null;
             } else {
                 ref = walker.get(rec.getReferenceIndex());
             }
+            int list_size = 100000;
+            list_ref.add(ref);
+            list_rec.add(rec);
 
-            if (arr.size() == 100000) {
+            if (list_rec.size() == list_size) {
                 List<Future> futures = new ArrayList<>(programs.size());
                 for (final SinglePassSamProgram program : programs) {
                     Future future = exec.submit(() -> {
-                        for (int i = 0; i < arr.size(); i++)
-                            program.acceptRead(arr.get(i), ref);
+                        for (int i = 0; i < list_rec.size(); i++)
+                            program.acceptRead(list_rec.get(i), list_ref.get(i));
                     });
                     futures.add(future);
                 }
@@ -160,9 +162,9 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
                         e.printStackTrace();
                     }
                 }
-                arr.clear();
+                list_rec.clear();
+                list_ref.clear();
             }
-
 
             progress.record(rec);
 
@@ -175,6 +177,27 @@ public abstract class SinglePassSamProgram extends CommandLineProgram {
             if (!anyUseNoRefReads && rec.getReferenceIndex() == SAMRecord.NO_ALIGNMENT_REFERENCE_INDEX) {
                 break;
             }
+        }
+
+        if (list_rec.size() > 0) {
+            List<Future> futures = new ArrayList<>(programs.size());
+            for (final SinglePassSamProgram program : programs) {
+                Future future = exec.submit(() -> {
+                    for (int i = 0; i < list_rec.size(); i++)
+                        program.acceptRead(list_rec.get(i), list_ref.get(i));
+                });
+                futures.add(future);
+            }
+
+            for (Future f : futures) {
+                try {
+                    f.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    e.printStackTrace();
+                }
+            }
+            list_rec.clear();
+            list_ref.clear();
         }
 
         exec.shutdown();

@@ -138,7 +138,8 @@ public class CollectBaseDistributionByCycle extends SinglePassSamProgram {
                     INPUT.getName(),
                     plotSubtitle);
             if (rResult != 0) {
-                throw new PicardException("R script nucleotideDistributionByCycle.R failed with return code " + rResult);
+                System.out.println("R script nucleotideDistributionByCycle.R failed with return code " + rResult);
+        //        throw new PicardException("R script nucleotideDistributionByCycle.R failed with return code " + rResult);
             }
         }
     }
