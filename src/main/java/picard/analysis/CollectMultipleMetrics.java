@@ -347,7 +347,8 @@ public class CollectMultipleMetrics extends CommandLineProgram {
 
     @Option(doc = "Set of metrics programs to apply during the pass through the SAM file.")
     public Set<Program> PROGRAM = new LinkedHashSet<>(Arrays.asList(Program.CollectAlignmentSummaryMetrics, Program.CollectBaseDistributionByCycle,
-            Program.CollectInsertSizeMetrics, Program.MeanQualityByCycle, Program.QualityScoreDistribution));
+            Program.CollectGcBiasMetrics, Program.CollectInsertSizeMetrics, Program.CollectSequencingArtifactMetrics,
+            Program.MeanQualityByCycle, Program.QualityScoreDistribution));
 
     @Option(doc = "An optional list of intervals to restrict analysis to. Only pertains to some of the PROGRAMs. Programs whose stand-alone CLP does not " +
             "have an INTERVALS argument will silently ignore this argument.", optional = true)
